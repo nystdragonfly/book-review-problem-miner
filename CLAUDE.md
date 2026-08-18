@@ -34,7 +34,33 @@ end product.
 As of 2026-08-17: pipeline approach validated end-to-end on one book
 (Watchmen) via disposable `scratch/` scripts — see `devlog.md` for the
 full session narrative and reasoning. Nothing is real pipeline code yet
-(see "Working conventions").
+(see "Working conventions"). `README.md` is the portfolio-facing writeup
+(different audience than this file — written for a client/hiring
+manager, not for me) covering the same ground with the debugging story
+as the centerpiece.
+
+**Idea, not started:** a separate, more fundamentals-focused project to
+demonstrate ML/AI understanding at a lower level than "use
+sentence-transformers/UMAP/HDBSCAN well" — this project is real evidence
+of judgment and tool-use skill (see README), but not of from-scratch
+algorithmic understanding the way the past neural-net-from-scratch
+project was. Explicitly deferred to a future session, not scoped yet.
+
+**Decided, not yet done: switch away from the UCSD Book Graph dataset.**
+Its license says "academic use only... should not be used for commercial
+purposes" — a real conflict with this project's purpose (demonstrating
+skills to attract paid/professional work), not just optics. Fine for the
+technical validation work done so far (genuinely academic/exploratory,
+nothing redistributed), but shouldn't be what a portfolio demo runs on
+going forward. Options considered: (1) find a dataset with actually
+permissive licensing (CC0/CC-BY/explicit commercial terms) — needs real
+verification before trusting any specific one, don't repeat the mistake
+of assuming a license is fine without checking; (2) synthetic/generated
+reviews for the demo-facing artifact specifically — zero licensing risk,
+and the debugging story (k-means → HDBSCAN → UMAP) doesn't actually
+depend on the data being real; (3) hybrid — keep current dataset for
+internal validation, swap only what gets shown to people. Not decided
+which option yet.
 
 Dataset chosen: **UCSD Book Graph** (Goodreads reviews, scraped by Julian
 McAuley / Mengting Wan's group, UCSD). Using the Comics & Graphic Novels

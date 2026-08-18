@@ -128,3 +128,48 @@ on one real book before generalizing to "any book."
   approach.**
 - `08_sentiment_labels.py` — adds sentiment + junk categorization on top
   of `07`. **Current end state of the exploration.**
+
+### Later in the session: portfolio framing + AI-collaboration honesty
+
+Committed the above as the initial commit (`34dd0ee`), then kept going
+on planning rather than stopping.
+
+Raised a real question: does this project actually demonstrate ML/AI
+understanding, given most of today was "Claude proposes a tool + explains
+why, I approve or redirect"? Worked through it honestly rather than
+brushing it off:
+
+- Distinguished *knowing a tool exists* from *recognizing when output is
+  wrong and directing a fix* — the second is what actually happened
+  (e.g. noticing the artwork-complaint cluster was missing after already
+  seeing the signal existed via the nearest-neighbor check).
+- Best evidence understanding actually transferred, not just got
+  demonstrated: unprompted, recognized that a personal project's "topic
+  memory" feature likely has the same k-means-style flaw (rare themes
+  getting absorbed into big generic clusters) and is considering applying
+  UMAP+HDBSCAN there. That's independent pattern transfer to a different
+  system, not just following along here.
+- Bigger question underneath: since this project is meant to prove
+  hireable skill (per `project-boundaries-guide_1.md`'s "freelance
+  portfolio" framing), what's actually being sold if AI wrote most of the
+  code? Landed on: the sellable skill isn't "typed the code unaided," 
+  it's catching wrong output before it ships, making the product/scope
+  judgment calls AI won't make unprompted, and verifying rather than
+  trusting results (GPU actually computing, not just detected; junk
+  threshold checked against real examples, not guessed) — decided to be
+  upfront about AI-assisted development rather than obscure it.
+
+**Wrote `README.md`** — portfolio-facing (different audience than
+`CLAUDE.md`), with the k-means → HDBSCAN → UMAP+HDBSCAN debugging journey
+as the centerpiece "here's what the collaboration actually produced"
+evidence, an honest "built in collaboration with AI" section, and results
+pulled from the real Watchmen run.
+
+**Flagged a licensing problem with using this dataset for portfolio
+purposes**, not just today's exploration: UCSD Book Graph is licensed
+"academic use only... should not be used for commercial purposes" — in
+real tension with a project meant to attract paid work. Fine for the
+technical validation already done (genuinely academic/exploratory, not
+redistributed), but decided this shouldn't be what a portfolio demo runs
+on going forward. Options logged in `CLAUDE.md`, not decided which one
+yet — next-session item.
