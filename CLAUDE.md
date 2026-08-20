@@ -10,13 +10,21 @@ Given reviews for a book, the pipeline:
 1. Filters OUT 5-star reviews (treated as low-signal / promotional — the
    assumption is that complaints live in the 1–4 star range).
 2. Cleans/preprocesses the remaining review text.
-3. Extracts complaint-relevant snippets from each review.
+3. Extracts complaint-relevant snippets from each review. (Decided
+   against a separate extraction step — embeds every sentence and lets
+   clustering sort out what's a real theme vs. discardable, rather than
+   pre-filtering with a keyword/rule-based complaint detector that would
+   risk silently dropping subtle complaints with no obvious keyword.)
 4. Embeds snippets as sentence vectors.
 5. Clusters the embeddings (UMAP + HDBSCAN — see "Where things stand") to
    find recurring themes.
 6. Labels each cluster (LLM-generated title + one-sentence summary — see
    "Where things stand"; TF-IDF keyword tags were tried and dropped).
-7. Outputs the top N complaint themes for a given book.
+7. Outputs structured results for every cluster (no "top N" ranking
+   baked into the pipeline — see `problem_miner/results.py`: deciding
+   what's worth surfacing is left to whatever consumes the output file,
+   since the "right" ranking depends on who's looking and why, which the
+   pipeline has no way to know).
 
 Explicitly **not** goals: general sentiment analysis, positive-review
 summarization, star-rating prediction, or per-review classification as an
@@ -32,13 +40,42 @@ end product.
 
 ## Where things stand
 
-As of 2026-08-17: pipeline approach validated end-to-end on one book
-(Watchmen) via disposable `scratch/` scripts — see `devlog.md` for the
-full session narrative and reasoning. Nothing is real pipeline code yet
-(see "Working conventions"). `README.md` is the portfolio-facing writeup
-(different audience than this file — written for a client/hiring
-manager, not for me) covering the same ground with the debugging story
-as the centerpiece.
+**As of 2026-08-20: the real pipeline exists and works — `problem_miner/`
+is the current implementation, not `scratch/`.** `scratch/01-10` are
+kept as historical record of how the approach got validated (see
+`devlog.md` for the full narrative), but they're superseded, not the
+thing to run or edit going forward.
+
+Run it via `python -m problem_miner --source {jsonl,goodreads}
+--reviews-file PATH --book-id ID [--book-context TEXT] [--output PATH]`
+— see `problem_miner/cli.py` for all flags.
+
+Package layout:
+- `config.py` — centralized model names/thresholds (`PipelineConfig`)
+- `sources/` — `RawReview` canonical shape + `ReviewSource` interface;
+  `GoodreadsSource` (real UCSD data, gzip, multi-book firehose file) and
+  `JsonlSource` (synthetic data, pre-scoped file) — only the two sources
+  actually in use, not speculative future formats
+- `clean.py` / `split.py` / `embed.py` / `cluster.py` / `categorize.py`
+  / `label.py` — the pipeline stages
+- `pipeline.py` — orchestration (`run_pipeline`)
+- `results.py` — structured JSON output, no ranking applied
+- `cli.py` / `__main__.py` — the `python -m problem_miner` entry point
+
+Validated end-to-end via the actual CLI against both real sources,
+matching the known-good numbers from the `scratch/` validation exactly
+(Watchmen: 5,523 sentences → 73 clusters; Aria-7: 424 sentences → 13
+clusters) — see devlog 2026-08-20 "Real pipeline package built."
+
+Setup: `pip install -r requirements.txt` (verified in a genuinely fresh
+venv, not just derived from memory), plus `nltk.download('punkt_tab')`
+once, plus a running local Ollama server with a model pulled (see
+`requirements.txt` header for exact commands). No API keys needed —
+everything runs locally.
+
+`README.md` is the portfolio-facing writeup (different audience than
+this file — written for a client/hiring manager, not for me) covering
+the same ground with the debugging story as the centerpiece.
 
 **Idea, not started:** a separate, more fundamentals-focused project to
 demonstrate ML/AI understanding at a lower level than "use
@@ -91,7 +128,12 @@ genre slice for now:
 - Both downloaded directly from `mcauleylab.ucsd.edu` (no login/API key
   needed). **Academic use only per the dataset's license — do not
   redistribute or use commercially.** Not committed to git (see `data/` in
-  `.gitignore`); re-download via the URLs above if the directory is missing.
+  `.gitignore`); re-download if the directory is missing:
+  ```bash
+  mkdir -p data
+  curl -o data/goodreads_reviews_comics_graphic.json.gz "https://mcauleylab.ucsd.edu/public_datasets/gdrive/goodreads/byGenre/goodreads_reviews_comics_graphic.json.gz"
+  curl -o data/goodreads_books_comics_graphic.json.gz "https://mcauleylab.ucsd.edu/public_datasets/gdrive/goodreads/byGenre/goodreads_books_comics_graphic.json.gz"
+  ```
 - Verified `Watchmen` (book_id `472331`) as a good demo case: 1,757 reviews,
   771 usable non-5-star reviews with real text (>50 chars) — plenty of
   signal for clustering.
@@ -315,9 +357,12 @@ Desktop, not laptop — no need to be stingy with compute:
 
 ## Working conventions
 
-- Python, using the `venv/` in this repo (Python 3.12.3, currently empty —
-  install packages as they're actually needed rather than front-loading a
-  big requirements list).
+- Python, using the `venv/` in this repo (Python 3.12.3). `requirements.txt`
+  lists direct dependencies only (transitive deps, incl. CUDA packages,
+  resolve automatically) — added once the dependency set stabilized,
+  rather than front-loaded; kept honest by testing installs in a
+  genuinely fresh venv, not just derived from memory of what got
+  `pip install`ed along the way.
 - Prefer explaining trade-offs before locking in a library/method choice
   (e.g. which embedding model, which clustering algorithm) rather than
   silently picking one.

@@ -1,0 +1,24 @@
+# Direct dependencies of problem_miner/. Transitive dependencies (torch,
+# transformers' own deps, CUDA packages, etc.) are resolved automatically
+# by pip -- not pinned here, since exact CUDA-package versions are
+# platform/GPU-specific and pinning them precisely would hurt portability
+# more than it helps reproducibility.
+#
+# Also requires, outside of pip:
+#   - nltk's punkt_tab tokenizer data: python3 -c "import nltk; nltk.download('punkt_tab')"
+#   - a running Ollama server (https://ollama.com) with a model pulled,
+#     e.g. `ollama pull mistral-nemo:12b` -- used for cluster labeling
+#     and the negation sentiment re-check (see config.py to change the
+#     model/URL)
+#   - GPU-accelerated embedding/sentiment steps expect a CUDA-capable
+#     GPU; sentence-transformers/transformers will fall back to CPU
+#     automatically if none is available, just slower
+
+langdetect
+nltk
+numpy
+sentence-transformers
+scikit-learn
+umap-learn
+transformers
+requests

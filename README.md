@@ -7,13 +7,13 @@ actually complain about," "here's what they praise," and "here's what
 you should know before picking it up" — instead of a single blended
 4.2★ average that tells you nothing about *why*.
 
-**Status: exploratory prototype.** The full pipeline, including cluster
-labeling, is validated end-to-end — technically on real Goodreads data
-(the debugging story below), and separately on a cleanly-licensed
-synthetic dataset for what's actually shown (see "A licensing decision"
-below for why those are two different datasets). Not yet generalized to
-arbitrary books or built out as production code. See
-[`devlog.md`](devlog.md) for the complete session-by-session history.
+**Status: working pipeline, not a hardcoded demo.** `problem_miner/` is a
+real, installable package with a CLI (`python -m problem_miner --source
+{jsonl,goodreads} --reviews-file PATH --book-id ID`) — book-agnostic,
+not one script per book. Validated end-to-end against two different real
+data sources (see "Results" below). See [`devlog.md`](devlog.md) for the
+complete session-by-session history and [`CLAUDE.md`](CLAUDE.md) for
+current implementation notes.
 
 ## Built in collaboration with AI (Claude Code)
 
@@ -70,6 +70,41 @@ reasons *why* — found because a known-good signal was checked against
 the actual output rather than trusted because the output looked
 plausible.
 
+## Case study #2: when the obvious fix doesn't hold up
+
+A second example of the same practice — catch it, investigate with real
+data, and specifically be willing to abandon a fix that *looks* right
+once the data says otherwise.
+
+While reviewing labeled output, a 4★ review's sentence — *"The
+trap-engineering stuff scratched an itch I didn't know I had"* — showed
+up tagged **negative**. Clearly positive to any human reader. Worth
+checking whether that was a one-off or a real pattern: it turned out to
+affect **9–23% of 4★ sentences** (depending on dataset), always the same
+shape — praise phrased as a subverted expectation ("didn't expect to
+care," "no stat screens, no XP bars, just..."). The sentiment model
+keys on the negation word, not the sentence's actual meaning — a known,
+general weakness in sentiment analysis, not specific to this pipeline.
+
+The obvious fix — swap in a general-purpose LLM (already running
+locally for cluster labeling) — turned out to be **not a clean win**.
+Tested directly rather than assumed: the LLM did better on negated
+praise (4/8 vs. 0/8) but *worse* on genuinely negative terse dismissals
+like *"Not for me."* (0/4 vs. 4/4) — it needs context a one-line
+sentence doesn't give it. A cheaper idea — route only "probably
+mismatched" sentences to the LLM based on sentence length, which looked
+clean on a handful of hand-picked examples — **failed when checked
+against the full 445-sentence candidate set** (the length pattern was a
+small-sample coincidence, not real). Abandoned rather than shipped.
+
+Landed on a narrower, verified rule: re-check negative-classified,
+negation-containing sentences against the local LLM, but only
+auto-apply the correction where disagreement was spot-checked as
+reliable (negative→positive, ~100% real corrections) — not the direction
+that turned out to be a genuine mixed bag (negative→neutral, real fixes
+mixed with real regressions). Implemented in
+[`problem_miner/categorize.py`](problem_miner/categorize.py).
+
 ## A licensing decision, not just a technical one
 
 Worth being upfront about the actual sequence here, not just the tidy
@@ -121,8 +156,31 @@ piece of judgment from the clustering one.
 | Split | Sentence-level (`nltk`), not whole-review | A single review often mixes praise and complaint — sentence granularity keeps them separable |
 | Embed | `sentence-transformers` (`all-mpnet-base-v2`), GPU-accelerated | Captures meaning, not keywords — see case study above for why that matters concretely |
 | Cluster | UMAP (dimensionality reduction) → HDBSCAN | See case study — the straightforward approach (k-means) provably lost real themes |
-| Categorize | Per-sentence sentiment classification (not review star rating) → negative / positive / neutral, plus a junk filter | A sentence's own text is classified directly, since one review's rating doesn't apply evenly to all its sentences |
-| Label | LLM-generated title + one-sentence summary per cluster, via a local model (Ollama, `mistral-nemo:12b`) | Raw example sentences aren't a finished answer to "what is this theme" — a local model keeps this step free and consistent with everything else in the pipeline being local; a TF-IDF keyword-tag alternative was built and compared, then dropped as net noise |
+| Categorize | Per-sentence sentiment classification (not review star rating) → negative / positive / neutral, plus a junk filter, plus a targeted LLM re-check for negation misreads (see case study #2) | A sentence's own text is classified directly, since one review's rating doesn't apply evenly to all its sentences |
+| Label | LLM-generated title + one-sentence summary per cluster, via a local model (Ollama, `mistral-nemo:12b`) — skipped for junk clusters, which get a fixed label instead | Raw example sentences aren't a finished answer to "what is this theme" — a local model keeps this step free and consistent with everything else being local; asking it to summarize content-free junk clusters caused it to hallucinate a theme (an actual bug hit and fixed — see `problem_miner/pipeline.py`); a TF-IDF keyword-tag alternative was built and compared, then dropped as net noise |
+
+Implementation: [`problem_miner/`](problem_miner/) — `config.py` (settings), `sources/` (data-source abstraction), `clean.py`/`split.py`/`embed.py`/`cluster.py`/`categorize.py`/`label.py` (pipeline stages), `pipeline.py` (orchestration), `results.py` (structured output, no ranking applied), `cli.py` (entry point).
+
+## Running it yourself
+
+```bash
+pip install -r requirements.txt
+python3 -c "import nltk; nltk.download('punkt_tab')"   # one-time
+# requires a local Ollama server running with a model pulled, e.g.:
+#   ollama pull mistral-nemo:12b
+
+python -m problem_miner \
+  --source jsonl \
+  --reviews-file synthetic_data/aria7_reviews.jsonl \
+  --book-id synthetic-aria7-b1 \
+  --output output/results.json
+```
+
+Runs entirely locally — no API keys, nothing sent externally. The
+Watchmen/real-data path (`--source goodreads`) needs the UCSD dataset
+downloaded separately (not committed to the repo — see `CLAUDE.md` for
+the download URLs and license terms); the synthetic Aria-7 path above
+needs nothing beyond what's already in the repo.
 
 ## Results on real data (Watchmen, 1,757 Goodreads reviews — technical validation)
 
@@ -196,23 +254,36 @@ accepting that trade-off anyway.
 
 ## Tech stack
 
+- **Package:** `problem_miner/` — installable, CLI-driven, source-agnostic (see "Running it yourself" above)
 - **Datasets:** [UCSD Book Graph](https://mengtingwan.github.io/data/goodreads.html) (Goodreads reviews scraped by Julian McAuley's lab) for internal technical validation only — academic use only, not redistributed, not what's shown as the demo (see "A licensing decision" above); a synthetic, fully-owned dataset for the actual demo-facing results.
 - **Embeddings:** `sentence-transformers` / `all-mpnet-base-v2`
 - **Dimensionality reduction:** `umap-learn`
 - **Clustering:** `HDBSCAN` (via `scikit-learn`)
-- **Sentiment classification:** `transformers` / `cardiffnlp/twitter-roberta-base-sentiment-latest`
+- **Sentiment classification:** `transformers` / `cardiffnlp/twitter-roberta-base-sentiment-latest`, plus a targeted local-LLM re-check (see case study #2)
 - **Cluster labeling:** local Ollama (`mistral-nemo:12b`) for title + summary generation
 - **Text processing:** `nltk`, `langdetect`
 - Runs entirely locally (NVIDIA RTX 5080) — no data sent to any external API, for either the ML pipeline or the labeling step.
 
 ## What's next
 
-- Generalize beyond a single hardcoded book.
-- Turn the validated `scratch/` exploration scripts into real,
-  reusable pipeline code.
+Real remaining gaps, not just hypothetical polish:
+- A `negative→neutral` sentiment-recheck bucket (167 sentences in
+  testing) is a genuine mixed bag — some real corrections, some real
+  regressions — not yet resolved, and probably related to the
+  still-deferred compound-sentence limitation (see `CLAUDE.md`).
+- No automated tests yet — validation so far has been manual
+  spot-checking against known-good numbers, which was rigorous but
+  isn't the same as a regression-proof test suite.
+- Only two data sources exist (real Goodreads, synthetic JSONL) —
+  the abstraction supports more, nothing else has been built or tested.
+
+Longer-term/exploratory:
 - A separate, more fundamentals-focused project is planned to
   demonstrate ML/AI understanding at a lower level than "use the
   standard library well" — not started yet.
+- Compound sentences, quoted-dialogue-as-opinion, and other known
+  limitations in `CLAUDE.md` remain deliberately deferred — real,
+  documented, not blocking.
 
 See [`CLAUDE.md`](CLAUDE.md) for full working notes and
 [`devlog.md`](devlog.md) for the complete decision history.
