@@ -1,5 +1,7 @@
 # Book Review Problem-Miner
 
+**Repo:** [github.com/nystdragonfly/book-review-problem-miner](https://github.com/nystdragonfly/book-review-problem-miner)
+
 A tool that reads through a book's reviews and surfaces the *specific
 problems readers report* — grouped into themes, not buried in a pile of
 star ratings. Point it at a book; it tells you "here's what people
