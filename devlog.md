@@ -6,6 +6,103 @@ history/reasoning behind how it got that way.
 
 ---
 
+## 2026-08-20 (continued) — Real pipeline package built, sentiment negation bug found and fixed
+
+**Goal:** decide on and build the real pipeline package (`problem_miner/`),
+superseding `scratch/`. Went further than planned — a user-spotted
+misclassification turned into a real investigation and fix.
+
+### What got done
+
+1. **Pushed the repo to GitHub** (public, per user's choice —
+   `github.com/nystdragonfly/ai-ml-demo`) via `gh repo create --push`.
+2. **Sketched, then built, the real package structure**: `config.py`
+   (centralized settings, previously scattered magic numbers),
+   `results.py` (structured JSON output — deliberately no "top N"
+   ranking baked in; decided a future consumer should decide what's
+   worth surfacing, not the pipeline), `sources/` (canonical `RawReview`
+   shape + `ReviewSource` interface, two implementations — only for the
+   two sources actually in use, not speculative future formats),
+   `clean.py`/`split.py`/`cluster.py`/`categorize.py`/`label.py` (ported
+   validated logic onto typed objects instead of loose dicts),
+   `pipeline.py` + `cli.py` (orchestration + `python -m problem_miner`).
+3. **Validated end-to-end against both real sources via the actual CLI**,
+   not just imported and assumed correct — exact match against known-good
+   scratch-run numbers for both Watchmen (5523 sentences/73 clusters) and
+   Aria-7 (424 sentences/13 clusters).
+4. **Fixed a real bug found during validation**: cluster labeling asked
+   the LLM to summarize junk-category clusters (bare interjections/
+   numbers) and it hallucinated a plausible-sounding but wrong theme —
+   "Unresponsive Customer Service" for a cluster that was literally just
+   "2.", "3.", "4." fragments. Junk clusters now get a fixed label,
+   skipping the LLM call entirely.
+5. **User correctly guessed the real cause of that junk content**, and
+   turned out to be right where my own hypothesis had been wrong: traced
+   review_ids back to source reviews and confirmed these are numbered
+   lists in substantive reviews ("A few more notes... 1. I actually
+   liked Adrian more in the film. 2. Jackie Earle Haley...") that
+   `nltk.sent_tokenize` doesn't understand, orphaning the list markers.
+   List *content* survives fine. Corrected the CLAUDE.md record rather
+   than leaving the earlier wrong guess in place. User's own read: this
+   doesn't need separate handling, it's the same accepted context-free-
+   sentence limitation already logged — right call, didn't chase it
+   further.
+6. **User spotted a real sentiment misclassification** in the output
+   ("scratched an itch I didn't know I had" from a 4★ review, tagged
+   negative) and asked whether it happens often enough to matter.
+   Investigated with real numbers instead of guessing:
+   - Quantified the pattern: 9.3% (Aria-7) / 23.1% (Watchmen) of 4★
+     sentences get classified negative — all genuinely positive,
+     sharing one trait: praise phrased as negated/subverted expectation.
+   - User connected this to a known general NLP weakness (negation
+     handling) — confirmed correct.
+   - Tested whether the local LLM (already running for labeling) does
+     better: mixed result, not a clean swap. Better on negated praise
+     (4/8 vs. 0/8) but *worse* on terse genuine negatives like "Not for
+     me." (0/4 vs. small classifier's 4/4), even with added context (2/4).
+   - Tried a word-count heuristic to route only likely-mismatched
+     sentences to the LLM — looked clean on 12 hand-picked examples,
+     **failed to hold up against the full 445-candidate set** (median
+     length ~16 words either way). Correctly abandoned rather than shipped.
+   - User caught a real flaw in the reasoning: length was never actually
+     about *risk* (agreement causes no harm, just cost) — the real
+     question was reliability of the LLM specifically when it
+     *disagrees*. Reran the full candidate set and looked at disagreement
+     direction instead: negative→positive (16/445) was ~100% real
+     corrections on spot-check; negative→neutral (167/445) was a genuine
+     mixed bag (real corrections mixed with real regressions on terse
+     dismissals) — not safe to auto-apply.
+   - **Implemented the resulting policy**: re-check negative-classified,
+     negation-containing sentences against the local LLM, auto-apply
+     only the negative→positive direction. Verified the original
+     reported sentence now classifies positive.
+
+### Key decisions and why
+
+- **Don't naively swap the sentiment model for the LLM.** Different,
+  comparable-sized blind spots, not a strict upgrade — the LLM is worse
+  on short text without context. A blanket swap would trade one bias for
+  another, not fix anything.
+- **Length-based pre-filtering: tried, measured, abandoned.** A clean
+  pattern on a small sample is not evidence it holds at scale — worth
+  remembering as a general lesson, not just specific to this case.
+- **Only auto-apply the high-confidence disagreement direction.** Where
+  the data couldn't cleanly separate "real correction" from "real
+  regression" (the neutral bucket), left it alone rather than guess.
+  Consistent with the project's running principle: don't ship a fragile
+  heuristic to solve something imprecisely.
+
+### Still open
+
+- The negative→neutral bucket (167 sentences) is real and uninvestigated
+  further — ties into the still-deferred compound-sentence limitation
+  (several examples in that bucket were genuinely mixed/hedged sentences).
+- README/CLAUDE.md's pipeline description still needs updating to
+  reflect `problem_miner/` as the real implementation (scratch/ scripts
+  are now superseded, not deleted).
+
+---
+
 ## 2026-08-20 — Dataset licensing resolved + cluster labeling built
 
 **Goal for the session:** resolve the dataset-licensing decision left

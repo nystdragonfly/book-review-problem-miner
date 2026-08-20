@@ -265,16 +265,53 @@ Desktop, not laptop — no need to be stingy with compute:
   commentary about rating justification), not a true sentiment cluster —
   worth checking whether other clusters with near-tied sentiment
   breakdowns have the same "topic, not sentiment" mislabeling problem.
-- **Sentiment model may not be well-calibrated for book-review prose.**
-  `cardiffnlp/twitter-roberta-base-sentiment-latest` is trained on tweets.
-  The overall 3-way sentiment split across all 5,523 Watchmen sentences
-  came out suspiciously even (1848 neutral / 1838 positive / 1837
-  negative) — could be a real property of mixed reviews, or could be the
-  model not discriminating well on longer/more nuanced prose than it was
-  trained on. Individual cluster labels looked sensible on inspection
-  (e.g. 95% negative for an "unlikable characters" cluster), so not
-  blocking on this, but worth a closer look later — maybe compare against
-  a model trained on longer-form review text specifically.
+- **RESOLVED (partially), 2026-08-20: sentiment model systematically
+  misreads negated praise.** Started from a user-spotted example: "The
+  trap-engineering stuff scratched an itch I didn't know I had." (a
+  4★ review) classified negative. Investigated with real data instead
+  of guessing:
+  - Quantified: 9.3% of 4★ Aria-7 sentences and 23.1% of 4★ Watchmen
+    sentences get classified negative. Reading a sample, every one was
+    genuinely positive, sharing one pattern — praise phrased as a
+    subverted/negated expectation ("didn't expect to care", "no stat
+    screens, no XP bars, just..."). The model keys on the negation word
+    rather than the sentence's actual meaning. This is a known general
+    weakness in sentiment analysis, not unique to this pipeline or
+    model — confirms/sharpens the earlier vague "suspiciously even
+    3-way split" suspicion with a real mechanism.
+  - Tested the hypothesis that a general-purpose local LLM (already
+    running for cluster labeling) would do better: **mixed result, not
+    a clean win.** On the negated-praise set the LLM got 4/8 right
+    (small classifier got 0/8) but hedged the rest to "neutral" rather
+    than getting the direction right. On a control set of genuinely
+    negative terse dismissals ("Not for me.") the LLM did *worse*
+    (0/4, vs. the small classifier's 4/4) — it needs more context to
+    read short text correctly, and even added context only partially
+    fixed this (2/4).
+  - A word-count heuristic to route only "probably-negated-praise"
+    candidates to the LLM looked clean on a small hand-picked sample
+    (11-25 words vs. 3-5 words) but **did not hold up at scale** —
+    checked against the full 445-candidate set, median length was 16
+    words either way. Correctly abandoned rather than shipped on a
+    small-sample coincidence.
+  - Landed on: run the LLM re-check on the full candidate set (negative
+    + contains a negation marker — see `categorize.py`), but **only
+    auto-apply the negative→positive disagreement direction** (16/445
+    candidates, spot-checked as essentially all genuine corrections).
+    negative→neutral disagreements (167/445) were deliberately left
+    alone — spot-checking that bucket found a real mix of genuine
+    corrections (hedged/compound sentences like "Good, not great.")
+    and real regressions (terse dismissals wrongly softened), not safe
+    to auto-apply without per-sentence judgment.
+  - Implemented in `problem_miner/categorize.py`
+    (`_recheck_negation_candidates`, gated by
+    `config.enable_negation_recheck`). Verified the original reported
+    sentence now classifies positive.
+  - **Still open:** the negative→neutral bucket is real, uninvestigated
+    further, and the compound-sentence overlap noticed there ("Good,
+    not great.", "Prose is nice but the plot doesn't move much") ties
+    back to the still-deferred compound-sentence limitation above —
+    the two problems may be more related than previously treated.
 
 ## Working conventions
 

@@ -60,6 +60,15 @@ class PipelineConfig:
     # words; the next-lowest legitimate cluster averaged 5.0 -- clean gap.
     junk_avg_word_threshold: float = 4.0
 
+    # Sentences the small sentiment classifier calls "negative" AND that
+    # contain a negation marker get a second opinion from the local LLM.
+    # Only acts on negative->positive disagreements (validated as
+    # near-100% reliable on manual spot-check, see devlog 2026-08-20) --
+    # negative->neutral disagreements are NOT auto-applied, since that
+    # bucket was a genuine mixed bag (real corrections mixed with
+    # regressions on terse dismissals like "Not for me.").
+    enable_negation_recheck: bool = True
+
     # --- labeling ---
     # Local Ollama, not a paid API -- keeps the whole pipeline local/free,
     # consistent with every other model used. Same model already running
