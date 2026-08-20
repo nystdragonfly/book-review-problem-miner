@@ -228,6 +228,21 @@ Desktop, not laptop — no need to be stingy with compute:
   needing a per-sentence length cutoff or URL stripping. Doesn't help a
   junk sentence that happens to land in a real cluster, but resolves the
   common case.
+  - **Concrete mechanism found (2026-08-20):** a chunk of the junk-
+    category bare-number sentences ("2.", "3.") trace back to numbered
+    lists inside otherwise substantive reviews (e.g. "A few more notes
+    regarding the movie: 1. I actually liked Adrian more in the film. 2.
+    Jackie Earle Haley..."), not people typing a bare rating as their
+    whole review — `nltk.sent_tokenize` doesn't understand list markers
+    and either orphans them as standalone fragments or glues them onto
+    the end of an unrelated sentence. Verified by tracing review_ids
+    back to the original full review text, not just assumed. The actual
+    list *content* survives fine as clean separate sentences — only the
+    bare markers are noise. Corrects an earlier wrong guess (that these
+    were literally people typing just a star number). **Not treated as
+    a new problem to fix** — it's a specific instance of the
+    context-free-sentence limitation immediately above, already
+    accepted as a known trade-off of sentence-level splitting.
 - **Quoted book dialogue gets treated as reviewer opinion.** Discovered
   via sentiment labeling: one cluster (Watchmen cluster 13) turned out to
   be reviewers quoting the book's own dialogue back ("She's screaming

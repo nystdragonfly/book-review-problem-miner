@@ -9,3 +9,5 @@ data/
 .idea/
 scratch/.cache/
 book-source/
+.cache/
+output/
