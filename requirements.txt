@@ -22,3 +22,6 @@ scikit-learn
 umap-learn
 transformers
 requests
+
+# test-only
+pytest

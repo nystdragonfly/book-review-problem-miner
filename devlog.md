@@ -6,6 +6,65 @@ history/reasoning behind how it got that way.
 
 ---
 
+## 2026-08-20 (continued further) — Docs updated to match reality, completeness pass
+
+**Goal:** update README/CLAUDE.md to reflect `problem_miner/` as the
+real pipeline (they still described the superseded `scratch/` era), then
+assess what's actually needed to call this finished.
+
+### What got done
+
+1. **Docs brought in line with the code.** README's status line, tech
+   stack, and "how it works" table were describing a hardcoded-per-book,
+   not-yet-generalized state that hadn't been true since the package got
+   built. Rewrote to describe the actual CLI/package, added a "Running
+   it yourself" quickstart, and added the negation-recheck investigation
+   as a second case study (same verify-don't-assume practice, plus the
+   extra step of correctly abandoning a plausible-looking fix that
+   didn't survive contact with the full dataset).
+2. **Took stock of the repo before claiming anything was "finished"**
+   rather than assuming: no `requirements.txt`, no `LICENSE`, no
+   `tests/`. Concrete, checkable gaps, not vague polish.
+3. **Fixed the unambiguous one myself**: wrote `requirements.txt` (7
+   direct dependencies, derived from actually grepping every import
+   across the package, not memory) and verified it in a genuinely fresh
+   venv — caught one real omission (`numpy`, imported directly but
+   would've only worked by transitive luck).
+4. **Asked rather than assumed on the two judgment calls**: LICENSE
+   (MIT vs. none) and whether a test suite was worth building before
+   calling this done. User chose MIT and "yes, minimal" for both.
+5. **Added `LICENSE`** (MIT), with an explicit scope note — the
+   synthetic review data (derived from the user's private manuscript)
+   and any downloaded UCSD data are NOT covered by the code license,
+   since blanket-licensing content with different provenance than the
+   code would be a real mistake, not a technicality.
+6. **Added `tests/`** (29 tests, `pytest`, <1s runtime) covering the
+   pure-logic pieces already validated manually throughout this project
+   — cleaning filters, junk-threshold/categorization logic, both source
+   loaders, results JSON round-trip. Deliberately excluded the GPU/
+   network-dependent stages (embedding, sentiment classification, LLM
+   calls) rather than build brittle mocks for a "minimal" scope. Caught
+   one real test-authoring mistake in the process: a filler string of
+   repeated letters ("aaa...a") used to pad a test review to the length
+   threshold correctly failed `is_english()`, since it isn't real
+   English — fixed the test data, not the code, since the code was right.
+
+### Key decisions and why
+
+- **"Is this finished" got split into three categories, not treated as
+  one flat checklist**: things fixable without input (requirements.txt —
+  just did it), things requiring a real decision (LICENSE, test scope —
+  asked), and legitimately open-ended future work that doesn't block
+  "finished" (the negative→neutral bucket, compound sentences, more data
+  sources, a real UI, the fundamentals project). Conflating these would
+  either block indefinitely on infinite-scope items or skip real gaps by
+  treating everything as equally optional.
+- **License scoped explicitly to code, not blanket-applied.** Easy
+  mistake to make by just dropping in a standard MIT file; worth the
+  extra sentence to get right given the synthetic data's actual provenance.
+
+---
+
 ## 2026-08-20 (continued) — Real pipeline package built, sentiment negation bug found and fixed
 
 **Goal:** decide on and build the real pipeline package (`problem_miner/`),

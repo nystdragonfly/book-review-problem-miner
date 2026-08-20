@@ -182,6 +182,13 @@ downloaded separately (not committed to the repo — see `CLAUDE.md` for
 the download URLs and license terms); the synthetic Aria-7 path above
 needs nothing beyond what's already in the repo.
 
+Tests (pure logic only — no GPU/network/Ollama required, so these run
+in well under a second):
+
+```bash
+python -m pytest tests/
+```
+
 ## Results on real data (Watchmen, 1,757 Goodreads reviews — technical validation)
 
 This is where the debugging story above happened. Real, unfiltered Goodreads
@@ -271,9 +278,11 @@ Real remaining gaps, not just hypothetical polish:
   testing) is a genuine mixed bag — some real corrections, some real
   regressions — not yet resolved, and probably related to the
   still-deferred compound-sentence limitation (see `CLAUDE.md`).
-- No automated tests yet — validation so far has been manual
-  spot-checking against known-good numbers, which was rigorous but
-  isn't the same as a regression-proof test suite.
+- `tests/` covers the pure-logic pieces (cleaning, categorization/junk
+  detection, source loaders, results round-trip) — the GPU/network-
+  dependent stages (embedding, sentiment classification, LLM labeling)
+  are still validated manually, since mocking them meaningfully would
+  need more investment than a "minimal" suite implies.
 - Only two data sources exist (real Goodreads, synthetic JSONL) —
   the abstraction supports more, nothing else has been built or tested.
 

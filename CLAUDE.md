@@ -73,6 +73,22 @@ once, plus a running local Ollama server with a model pulled (see
 `requirements.txt` header for exact commands). No API keys needed —
 everything runs locally.
 
+**`tests/` exists** (`python -m pytest tests/`, <1s, no GPU/network/
+Ollama needed) — covers the pure-logic pieces (`clean.py`, the junk-
+threshold/categorization logic in `categorize.py`, both `sources/`
+implementations, `results.py`'s JSON round-trip). Deliberately does NOT
+cover the GPU/network-dependent stages (embedding, sentiment
+classification, LLM labeling/re-check) — those stay validated manually
+(spot-checks against known-good numbers throughout devlog.md); properly
+mocking them was judged more investment than the "minimal test suite"
+scope called for. `conftest.py` at repo root exists solely so pytest can
+find `problem_miner` without an editable install.
+
+**`LICENSE` (MIT) added**, scoped explicitly to the source code only —
+a trailing note in the file itself clarifies `synthetic_data/
+aria7_reviews.jsonl` (derived from the user's private manuscript) and
+any downloaded UCSD data are NOT covered by it.
+
 `README.md` is the portfolio-facing writeup (different audience than
 this file — written for a client/hiring manager, not for me) covering
 the same ground with the debugging story as the centerpiece.
