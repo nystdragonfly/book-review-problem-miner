@@ -6,6 +6,105 @@ history/reasoning behind how it got that way.
 
 ---
 
+## 2026-08-20 — Dataset licensing resolved + cluster labeling built
+
+**Goal for the session:** resolve the dataset-licensing decision left
+open on 08-17, then keep going on cluster labeling if time allowed (it did).
+
+### What got done
+
+1. **Dataset search, real attempt, came up empty.** Looked for a
+   purchasable or reusable dataset with genuinely permissive licensing
+   (book reviews, star ratings, CC0/commercial-use terms). Checked
+   several specific candidates rather than trusting labels: Amazon-
+   Reviews-2023 (McAuley Lab) has no stated license at all — a yellow
+   flag, not a green light, especially from the same lab whose Goodreads
+   dataset explicitly said academic-only. A "CC0" Amazon Food Reviews
+   dataset on Hugging Face traced back to the same restricted McAuley/
+   SNAP academic source with a mislabeled license added somewhere in a
+   Kaggle→HuggingFace re-upload chain — confirmed real, not hypothetical,
+   license-laundering. Considered a legitimate paid data broker (Bright
+   Data via AWS Marketplace) — real EULA, but couldn't verify actual
+   terms and it's company reviews, not books anyway.
+2. **Considered and rejected self-scraping.** Would likely be a *worse*
+   legal position than the original problem — personally, knowingly
+   violating a platform's ToS specifically to build the commercial-
+   facing artifact the whole exercise was trying to make clean.
+3. **User did their own independent research on paid dataset providers**
+   and reported back: likely-usable data exists there, but (a) whether
+   the provider themselves scraped it against the source platform's own
+   terms would need real diligence to confirm, not just trusting the
+   sales pitch, and (b) the legitimate-looking ones start around
+   $800/month for a single dataset — a real barrier for an independent
+   operator starting out, separate from the legality question. Cheaper
+   alternatives showed obvious signs of questionable sourcing. Sharpens
+   the reasoning for synthetic data: not just "no free clean option,"
+   but "the compliant paid option isn't viable for who this project is
+   actually for."
+4. **User supplied a real, fully-owned manuscript** — `ARIA-7, Book One`,
+   a dungeon-core/progression-fantasy novel they co-wrote. Read the
+   opening, a middle section, and the ending directly (not just a
+   summary) before writing anything based on it, specifically so the
+   eventual synthetic reviews would reference real content and genre
+   positioning rather than being generic filler.
+5. **Wrote 275 synthetic reviews** across 5 batches, JSONL matching the
+   existing schema so `scratch/common.py` needed extending, not rewriting.
+   Deliberately imperfect: typos, informal grammar, non-English entries,
+   short junk reactions, occasional rating/text mismatches. One of these
+   (rating 3, text "5") got "cleaned up" as an apparent mistake, then
+   correctly called out and restored — a genuine human quirk, not noise
+   to remove. Also called out for writing suspiciously clean English even
+   in "casual" reviews — retrofitted typos into several existing entries
+   and kept a higher rate going forward.
+6. **Ran the full validated pipeline** (clean → split → embed → UMAP+
+   HDBSCAN → sentiment/junk categorize) on the new data:
+   206 cleaned reviews → 424 sentences → 13 clusters. Result: user
+   directly noted "I can see how the synthetic data reads cleaner than
+   real data would" — the exact limitation flagged going in, now
+   confirmed against real output, not just theorized. Two Watchmen
+   findings independently reproduced on this unrelated, synthetic
+   dataset (rating-justification meta-commentary reads as "topic not
+   sentiment"; a topic cluster mixing genuine praise and complaint about
+   the same subject) — good evidence these are real properties of the
+   method.
+7. **Built cluster labeling** (pipeline step 6, left open since 08-17):
+   LLM-generated title + one-sentence summary per cluster. Discovered the
+   user has a local Ollama server already running (`mistral-nemo:12b`,
+   `llama3.1:8b`, `mistral:7b`) — used that instead of the Anthropic API,
+   keeping the whole pipeline local/free like everything else in it.
+   Hit and fixed a real bug: the model wraps labels in markdown bold
+   (`**TITLE:**`) despite being told not to, breaking naive string
+   matching. Also built TF-IDF keyword tags specifically to compare
+   against the LLM output side by side — dropped after the comparison:
+   inconsistent value, often redundant, net noise rather than signal.
+
+### Key decisions and why
+
+- **Hybrid resolution to the dataset question, not a clean pick from the
+  original three options.** Real-data work on Watchmen stays exactly as
+  it was (legitimately academic/exploratory, not redistributed) — the
+  licensing problem was specifically about what's shown/distributed
+  going forward, not about invalidating work already done.
+- **Local Ollama over the Anthropic API for cluster labeling.** No new
+  cost, no new credential to manage, consistent with every other model
+  in the pipeline being local. The tradeoff (somewhat lower quality than
+  Claude) was judged acceptable — the actual output was good.
+- **Keyword tags: built, compared, deliberately dropped.** Worth noting
+  as a pattern — not every idea worth trying is worth keeping, and the
+  right way to find out is building the comparison, not guessing.
+
+### Next steps (pick up here)
+
+1. Generalize beyond a single hardcoded book (still true — now applies
+   to the Aria-7 script too, not just the Watchmen ones).
+2. Turn validated `scratch/` logic into real pipeline code — still
+   nothing has been "promoted" out of `scratch/`.
+3. Update `README.md` to reflect the dataset switch and the labeling
+   step (not done this session — the README still describes the
+   Watchmen-only state as of 08-17).
+
+---
+
 ## 2026-08-17 — Project kickoff + pipeline validated end-to-end on Watchmen
 
 **Goal for the session:** write the scope file, find a dataset, and (this

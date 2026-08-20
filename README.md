@@ -7,8 +7,11 @@ actually complain about," "here's what they praise," and "here's what
 you should know before picking it up" — instead of a single blended
 4.2★ average that tells you nothing about *why*.
 
-**Status: exploratory prototype.** The full pipeline is validated
-end-to-end on one real book (see below), not yet generalized to work on
+**Status: exploratory prototype.** The full pipeline, including cluster
+labeling, is validated end-to-end — technically on real Goodreads data
+(the debugging story below), and separately on a cleanly-licensed
+synthetic dataset for what's actually shown (see "A licensing decision"
+below for why those are two different datasets). Not yet generalized to
 arbitrary books or built out as production code. See
 [`devlog.md`](devlog.md) for the complete session-by-session history.
 
@@ -67,6 +70,48 @@ reasons *why* — found because a known-good signal was checked against
 the actual output rather than trusted because the output looked
 plausible.
 
+## A licensing decision, not just a technical one
+
+Worth being upfront about the actual sequence here, not just the tidy
+version: this project **started** on that same real Goodreads dataset —
+it's what the case study above ran on, and at the time it was the
+obvious choice for prototyping (large, well-documented, free, exactly
+the shape of data needed). It was only partway through, once the
+technical approach was already validated, that the dataset's license
+got read closely: "academic use only... should not be used for
+commercial purposes." Fine for the exploratory work already done —
+genuinely non-commercial, nothing redistributed — but a real conflict
+with this project's actual purpose: demonstrating skills to attract
+paid work. That's a mistake caught and corrected mid-project, not
+something avoided from the start, and I'd rather show that than pretend
+the dataset decision was clean from day one.
+
+Rather than quietly keep using it, I went looking for a genuinely
+permissively-licensed alternative and verified rather than assumed —
+which turned out to matter. One dataset labeled "CC0" on Hugging Face
+traced back to the exact same restricted academic source, with the
+license apparently relabeled somewhere in a Kaggle→HuggingFace
+re-upload chain by someone who didn't have the rights to grant it.
+Found zero trustworthy free/reusable options. The legitimate paid
+alternative exists but isn't a real option for a project like this one —
+compliant dataset access starts around $800/month for a single dataset,
+a barrier for an independent operator that a company with a data-
+licensing budget wouldn't face, and cheaper providers showed clear signs
+of sourcing their data via the same kind of questionable scraping this
+whole exercise was trying to avoid. Considered scraping review data
+myself and rejected it too — that would've been a *worse* legal position
+than the original problem, personally committing a platform ToS
+violation specifically to build the commercial-facing demo.
+
+Landed on synthetic data instead: AI-generated reviews of a real,
+fully-owned manuscript, with zero licensing ambiguity since nothing is
+scraped or redistributed. Disclosed limitation, not a solved problem:
+synthetic review text is measurably cleaner and less messy than real
+internet text — confirmed directly by comparing cluster output between
+the two datasets, not just assumed. The debugging story above doesn't
+depend on which dataset it ran on; the licensing decision is a separate
+piece of judgment from the clustering one.
+
 ## How it works
 
 | Step | What | Why this choice |
@@ -77,8 +122,13 @@ plausible.
 | Embed | `sentence-transformers` (`all-mpnet-base-v2`), GPU-accelerated | Captures meaning, not keywords — see case study above for why that matters concretely |
 | Cluster | UMAP (dimensionality reduction) → HDBSCAN | See case study — the straightforward approach (k-means) provably lost real themes |
 | Categorize | Per-sentence sentiment classification (not review star rating) → negative / positive / neutral, plus a junk filter | A sentence's own text is classified directly, since one review's rating doesn't apply evenly to all its sentences |
+| Label | LLM-generated title + one-sentence summary per cluster, via a local model (Ollama, `mistral-nemo:12b`) | Raw example sentences aren't a finished answer to "what is this theme" — a local model keeps this step free and consistent with everything else in the pipeline being local; a TF-IDF keyword-tag alternative was built and compared, then dropped as net noise |
 
-## Results on a real book (Watchmen, 1,757 Goodreads reviews)
+## Results on real data (Watchmen, 1,757 Goodreads reviews — technical validation)
+
+This is where the debugging story above happened. Real, unfiltered Goodreads
+reviews, used for internal validation only (see the licensing section above
+for why this isn't what runs as the shown demo).
 
 - 771 reviews passed the filter → 5,523 individual sentences
 - 73 clusters found (1,832 sentences didn't fit any cluster densely
@@ -105,20 +155,58 @@ want to know. The tool was originally scoped as "complaints only";
 finding this cluster in the real output was the reason to deliberately
 broaden that scope rather than discard it.
 
+## Results on the demo dataset (synthetic reviews, cleanly licensed)
+
+275 AI-generated reviews of a real, fully-owned manuscript — small
+enough that results are noticeably coarser than the Watchmen run above
+(smaller dataset, fewer clusters), which is an accepted trade-off for
+having something legally clean to actually show. This is also where
+cluster labeling ran for the first time:
+
+- 206 reviews passed the filter → 424 sentences → 13 clusters (145
+  sentences landed as noise)
+- Two findings from the Watchmen run **independently reappeared** here,
+  on a completely different and synthetic dataset — good evidence
+  they're real properties of the method, not one-off quirks of one
+  dataset: a cluster of reviewers doing rating-justification math
+  ("solid 3 stars, good but not amazing") that reads as a topic more
+  than a sentiment, and a cluster mixing genuine praise and genuine
+  complaint about the same specific topic
+
+Three labeled clusters, title + summary generated by a local model, not
+hand-written:
+
+> **TITLE: Repetitive Internal Monologue**
+> Reviewers found the frequent use of "she filed/catalogued/processed"
+> phrases tiresome and distracting.
+
+> **TITLE: Trap Engineering Pacing**
+> Readers find trap engineering sections engaging but overlengthy.
+
+> **TITLE: Cat Mystery's Slow Burn**
+> Reviewers praise ARIA-7 Book One's cat subplot as a well-paced and
+> satisfying mystery.
+
+One honest caveat, confirmed directly rather than just anticipated:
+synthetic review text reads measurably cleaner than the real Watchmen
+data — less noise, fewer of the genuinely weird edge cases real internet
+text produces. Disclosed as a known limitation of this dataset, not
+hidden — see the licensing section above for the reasoning behind
+accepting that trade-off anyway.
+
 ## Tech stack
 
-- **Dataset:** [UCSD Book Graph](https://mengtingwan.github.io/data/goodreads.html) (Goodreads reviews scraped by Julian McAuley's lab) — academic use only, not redistributed, downloaded fresh via the scripts noted in `CLAUDE.md`.
+- **Datasets:** [UCSD Book Graph](https://mengtingwan.github.io/data/goodreads.html) (Goodreads reviews scraped by Julian McAuley's lab) for internal technical validation only — academic use only, not redistributed, not what's shown as the demo (see "A licensing decision" above); a synthetic, fully-owned dataset for the actual demo-facing results.
 - **Embeddings:** `sentence-transformers` / `all-mpnet-base-v2`
 - **Dimensionality reduction:** `umap-learn`
 - **Clustering:** `HDBSCAN` (via `scikit-learn`)
 - **Sentiment classification:** `transformers` / `cardiffnlp/twitter-roberta-base-sentiment-latest`
+- **Cluster labeling:** local Ollama (`mistral-nemo:12b`) for title + summary generation
 - **Text processing:** `nltk`, `langdetect`
-- Runs GPU-accelerated locally (NVIDIA RTX 5080) — no data sent to any external API.
+- Runs entirely locally (NVIDIA RTX 5080) — no data sent to any external API, for either the ML pipeline or the labeling step.
 
 ## What's next
 
-- Give each cluster an actual title/summary instead of raw example
-  sentences (currently the weakest part of the output).
 - Generalize beyond a single hardcoded book.
 - Turn the validated `scratch/` exploration scripts into real,
   reusable pipeline code.

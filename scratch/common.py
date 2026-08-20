@@ -20,6 +20,10 @@ CACHE_DIR = Path(__file__).resolve().parent / ".cache"
 
 WATCHMEN_ID = "472331"
 
+SYNTHETIC_DATA_DIR = Path(__file__).resolve().parent.parent / "synthetic_data"
+ARIA7_REVIEWS_FILE = SYNTHETIC_DATA_DIR / "aria7_reviews.jsonl"
+ARIA7_BOOK_ID = "synthetic-aria7-b1"
+
 
 def normalize_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
@@ -42,9 +46,10 @@ def load_reviews_for_book(book_id: str) -> list[dict]:
     return reviews
 
 
-def load_cleaned_english_reviews(book_id: str, min_chars: int = 50) -> list[dict]:
-    """Non-5-star, non-unrated, real-length, English-only, whitespace-normalized."""
-    reviews = load_reviews_for_book(book_id)
+def clean_reviews(reviews: list[dict], min_chars: int = 50) -> list[dict]:
+    """Non-5-star, non-unrated, real-length, English-only, whitespace-normalized.
+    Shared cleaning logic — takes any list of raw review dicts, regardless of
+    which dataset they came from."""
     usable = [
         r for r in reviews
         if r["rating"] not in (0, 5) and len(r["review_text"]) > min_chars
@@ -55,6 +60,24 @@ def load_cleaned_english_reviews(book_id: str, min_chars: int = 50) -> list[dict
         if is_english(text):
             cleaned.append({**r, "review_text": text})
     return cleaned
+
+
+def load_cleaned_english_reviews(book_id: str, min_chars: int = 50) -> list[dict]:
+    """Real (Goodreads/UCSD) dataset only — see load_reviews_from_jsonl +
+    clean_reviews for the synthetic Aria-7 dataset."""
+    reviews = load_reviews_for_book(book_id)
+    return clean_reviews(reviews, min_chars)
+
+
+def load_reviews_from_jsonl(path: Path) -> list[dict]:
+    """Load the synthetic (plain, non-gzipped) JSONL review files."""
+    reviews = []
+    with open(path, "rt", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                reviews.append(json.loads(line))
+    return reviews
 
 
 def sentences_with_metadata(reviews: list[dict]) -> list[dict]:

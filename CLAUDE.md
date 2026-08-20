@@ -14,7 +14,8 @@ Given reviews for a book, the pipeline:
 4. Embeds snippets as sentence vectors.
 5. Clusters the embeddings (UMAP + HDBSCAN — see "Where things stand") to
    find recurring themes.
-6. Labels each cluster (top keywords + representative examples).
+6. Labels each cluster (LLM-generated title + one-sentence summary — see
+   "Where things stand"; TF-IDF keyword tags were tried and dropped).
 7. Outputs the top N complaint themes for a given book.
 
 Explicitly **not** goals: general sentiment analysis, positive-review
@@ -46,21 +47,37 @@ of judgment and tool-use skill (see README), but not of from-scratch
 algorithmic understanding the way the past neural-net-from-scratch
 project was. Explicitly deferred to a future session, not scoped yet.
 
-**Decided, not yet done: switch away from the UCSD Book Graph dataset.**
-Its license says "academic use only... should not be used for commercial
-purposes" — a real conflict with this project's purpose (demonstrating
-skills to attract paid/professional work), not just optics. Fine for the
-technical validation work done so far (genuinely academic/exploratory,
-nothing redistributed), but shouldn't be what a portfolio demo runs on
-going forward. Options considered: (1) find a dataset with actually
-permissive licensing (CC0/CC-BY/explicit commercial terms) — needs real
-verification before trusting any specific one, don't repeat the mistake
-of assuming a license is fine without checking; (2) synthetic/generated
-reviews for the demo-facing artifact specifically — zero licensing risk,
-and the debugging story (k-means → HDBSCAN → UMAP) doesn't actually
-depend on the data being real; (3) hybrid — keep current dataset for
-internal validation, swap only what gets shown to people. Not decided
-which option yet.
+**Done (2026-08-20): switched away from the UCSD Book Graph dataset for
+anything demo-facing, via the hybrid option.** Real-data work on
+Watchmen stays as-is (genuinely academic/exploratory, nothing
+redistributed, and it's the source of the k-means → HDBSCAN → UMAP
+debugging story in the README). Went looking for a purchasable/reusable
+CC0 dataset first — found none trustworthy (see devlog: the one "CC0"
+Amazon-reviews dataset found traces back to the same restricted McAuley
+academic source with a mislabeled license from a third-party re-upload;
+Amazon-Reviews-2023 has no stated license at all, itself a yellow flag).
+Considered self-scraping and rejected it — would likely be a *worse*
+legal position than the original problem, personally committing a ToS
+violation specifically to build the commercial-facing artifact.
+
+User's own independent research, worth recording: found paid dataset
+providers that likely have usable review data, but two real problems —
+(1) confirming they didn't themselves scrape against the source
+platform's terms would need real diligence, not just trusting the
+seller's claim; (2) legitimate-seeming ones start around $800/month for
+access to a single dataset, not viable for an independent operator/
+freelancer just starting out (as opposed to a company with budget for
+compliant data licensing). Cheaper alternatives showed clear signs of
+being sourced via questionable scraping themselves. Reinforces the
+synthetic-data decision with a sharper reason than "no free clean option
+exists": the legitimate paid option isn't viable for who this project
+is actually for.
+
+Landed on synthetic data, using a real manuscript the user wrote (`ARIA-7, Book
+One`, in `book-source/`) as the subject — see the new "Synthetic
+dataset" entry below. Real-data testing isn't abandoned going forward
+either — the licensing issue was specifically about what's shown/
+distributed, not about internal validation, which stays fine.
 
 Dataset chosen: **UCSD Book Graph** (Goodreads reviews, scraped by Julian
 McAuley / Mengting Wan's group, UCSD). Using the Comics & Graphic Novels
@@ -125,8 +142,53 @@ not real pipeline code yet — see "Working conventions"):
 - On Watchmen: 73 clusters / 3,691 clustered sentences (1,832 sentences
   landed as HDBSCAN noise) → 25 negative, 26 positive, 18 neutral, 4 junk
   clusters (1192 / 1577 / 754 / 168 sentences respectively).
-- Next real step: give each cluster a title/summary (not just top-5
-  example sentences) — this is pipeline step 6, not yet built.
+
+**Synthetic dataset (`synthetic_data/aria7_reviews.jsonl`)** — 275
+AI-written reviews of `ARIA-7, Book One` (the user's own manuscript,
+`book-source/ARIA-7-Book-One.pdf`), fully owned, zero licensing risk.
+Rating spread `{0:10, 1:38, 2:43, 3:59, 4:87, 5:38}`. Deliberately
+written with realistic noise, not polished: typos, informal grammar, a
+few non-English reviews, short junk-style reactions, occasional
+rating/text mismatches (e.g. rating 3 with review_text "5") — the kind
+of thing a human reviewer actually does, initially "cleaned up" by
+mistake and restored after feedback that it read as more authentic
+left alone. Genuinely written from having read the manuscript (opening,
+middle, and ending), not generic filler — themes include the
+Thomas/ARIA relationship, the repetitive "she filed it/catalogued it/
+processed it" narration style, the cat-pride subplot, genre-mismatch
+complaints (readers expecting stat-heavy LitRPG getting something more
+literary instead), and reactions to the cliffhanger ending.
+**Caveat, stated plainly, not hidden:** this is a weaker test than real
+data by construction — the user's own read after seeing the clustered
+output was "I can see how the synthetic data reads cleaner than real
+data would." Kept as a known, disclosed limitation rather than a solved
+problem — see README.
+- Pipeline run on this dataset (`scratch/09_aria7_full_pipeline.py`):
+  206 cleaned reviews → 424 sentences → 13 clusters (145 noise points).
+  Notably, two Watchmen-specific findings **independently reproduced**
+  on this completely different (and synthetic) dataset — strong evidence
+  they're real properties of the method, not one-off quirks: (1) a
+  cluster of rating-justification meta-commentary ("solid 3 stars...",
+  "3 stars for concept, 1 for pacing") showing the same "topic, not
+  sentiment" mislabeling as Watchmen's cluster 3; (2) a cluster (trap-
+  engineering) mixing genuine praise and genuine complaint about the
+  same specific topic, same as Watchmen's artwork cluster before finer
+  `min_cluster_size` tuning.
+- **Cluster labeling (pipeline step 6) — done**, via
+  `scratch/10_cluster_labeling.py`: LLM-generated title + one-sentence
+  summary per cluster, using a **local Ollama server already running on
+  this machine** (`localhost:11434`, model `mistral-nemo:12b` — the same
+  model already loaded for the user's personal AI setup; `llama3.1:8b`
+  and `mistral:7b` also available). Chosen over the Anthropic API
+  specifically to keep the pipeline local/free, consistent with every
+  other model used so far. Real bug hit and fixed: the model prefixes
+  labels with markdown bold (`**TITLE:**`) despite being told not to —
+  parsing must strip markdown before matching, or it silently fails.
+  Also tried TF-IDF keyword tags alongside the LLM title/summary,
+  specifically to compare and decide — **dropped after comparing real
+  output**: inconsistent value, sometimes added a nuance the title
+  missed, often just redundant/weak. Verdict: LLM title + summary alone
+  is sufficient; keyword tags added noise, not value.
 
 ## Who's working on this
 
@@ -174,6 +236,20 @@ Desktop, not laptop — no need to be stingy with compute:
   threshold). No fix attempted; would need something like quote-mark
   detection or checking if a sentence's language style matches Watchmen's
   in-story dialogue vs. reviewer prose.
+- **Sentiment classification misreads rating-justification meta-commentary.**
+  A cluster of sentences where reviewers explain/justify their *numeric*
+  star rating (e.g. "I gave it only four stars because I felt the
+  romance... was not very well done", "I wanted to give it 1 star, but
+  gave it 2 stars instead") got tagged NEGATIVE overall — but the
+  sentiment breakdown was a near-perfect three-way tie (32 negative / 32
+  neutral / 23 positive), and negative only won by the plurality
+  tiebreak. The model has no concept of the number itself as a verdict —
+  it reads the surrounding hedging/critique language ("only", "because...
+  wasn't very well done") and skews negative even when the stated rating
+  is actually high (4-4.5 stars). This is a topic cluster (meta-
+  commentary about rating justification), not a true sentiment cluster —
+  worth checking whether other clusters with near-tied sentiment
+  breakdowns have the same "topic, not sentiment" mislabeling problem.
 - **Sentiment model may not be well-calibrated for book-review prose.**
   `cardiffnlp/twitter-roberta-base-sentiment-latest` is trained on tweets.
   The overall 3-way sentiment split across all 5,523 Watchmen sentences
@@ -212,3 +288,9 @@ Desktop, not laptop — no need to be stingy with compute:
 - For anything substantial, prefer running scripts directly (terminal or
   PyCharm) over having output pasted into chat — full output, not a
   curated excerpt.
+- A local Ollama server is already running on this machine
+  (`localhost:11434`) for the user's personal AI setup — `mistral-nemo:12b`,
+  `llama3.1:8b`, and `mistral:7b` available. Use this instead of a paid
+  API for any generative-LLM step (e.g. cluster labeling) when the
+  content being sent isn't the restricted real dataset — keeps things
+  local/free and consistent with the rest of the pipeline.
