@@ -11,3 +11,5 @@ scratch/.cache/
 book-source/
 .cache/
 output/
+.claude/settings.local.json
+.claude/*.tmp.*
